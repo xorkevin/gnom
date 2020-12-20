@@ -47,9 +47,9 @@ func (s *GrammarSym) Kind() int {
 	return s.kind
 }
 
-func NewGrammarRule(from int, to []GrammarSym) GrammarRule {
+func NewGrammarRule(from GrammarSym, to ...GrammarSym) GrammarRule {
 	return GrammarRule{
-		from: from,
+		from: from.Kind(),
 		to:   to,
 	}
 }
@@ -264,12 +264,84 @@ func calcLL1ParseTable(rules []GrammarRule, nonTerminals *changeIntSet, nullable
 }
 
 type (
-	LL1Parser struct {
-		table map[int]map[int][]GrammarSym
+	TokenQueue struct {
+		tokens []Token
 	}
 )
 
-func NewLL1Parser(rules []GrammarRule, start, eof int) (*LL1Parser, error) {
+func NewTokenQueue(tokens []Token) *TokenQueue {
+	return &TokenQueue{
+		tokens: tokens,
+	}
+}
+
+func (q *TokenQueue) Empty() bool {
+	return len(q.tokens) == 0
+}
+
+func (q *TokenQueue) Pop() (Token, bool) {
+	if q.Empty() {
+		return Token{}, false
+	}
+	k := q.tokens[0]
+	q.tokens = q.tokens[1:]
+	return k, true
+}
+
+func (q *TokenQueue) Peek() (Token, bool) {
+	if q.Empty() {
+		return Token{}, false
+	}
+	return q.tokens[0], true
+}
+
+type (
+	LL1ParseTree struct {
+		sym      GrammarSym
+		token    Token
+		children []LL1ParseTree
+	}
+)
+
+func NewLL1ParseTree(sym GrammarSym, children []LL1ParseTree) *LL1ParseTree {
+	return &LL1ParseTree{
+		sym:      sym,
+		children: children,
+	}
+}
+
+func NewLL1ParseTreeLeaf(sym GrammarSym, token Token) *LL1ParseTree {
+	return &LL1ParseTree{
+		sym:   sym,
+		token: token,
+	}
+}
+
+func (t *LL1ParseTree) Term() bool {
+	return t.sym.Term()
+}
+
+func (t *LL1ParseTree) Kind() int {
+	return t.sym.Kind()
+}
+
+func (t *LL1ParseTree) Val() string {
+	return t.token.Val()
+}
+
+func (t *LL1ParseTree) Children() []LL1ParseTree {
+	return t.children
+}
+
+type (
+	LL1Parser struct {
+		table map[int]map[int][]GrammarSym
+		start GrammarSym
+		eof   GrammarSym
+	}
+)
+
+func NewLL1Parser(rules []GrammarRule, start, eof GrammarSym) (*LL1Parser, error) {
 	nonTerminals := newChangeIntSet()
 	for _, i := range rules {
 		nonTerminals.upsert(i.from)
@@ -283,7 +355,7 @@ func NewLL1Parser(rules []GrammarRule, start, eof int) (*LL1Parser, error) {
 	}
 	nullableSet := calcLL1NullableSet(rules)
 	firstSet := calcLL1FirstSet(rules, nullableSet)
-	followSet := calcLL1FollowSet(rules, start, eof, firstSet, nullableSet)
+	followSet := calcLL1FollowSet(rules, start.Kind(), eof.Kind(), firstSet, nullableSet)
 
 	parseTable, err := calcLL1ParseTable(rules, nonTerminals, nullableSet, firstSet, followSet)
 	if err != nil {
@@ -292,5 +364,69 @@ func NewLL1Parser(rules []GrammarRule, start, eof int) (*LL1Parser, error) {
 
 	return &LL1Parser{
 		table: parseTable,
+		start: start,
+		eof:   eof,
 	}, nil
+}
+
+func (p *LL1Parser) getProduction(nt, t int) ([]GrammarSym, bool) {
+	r, ok := p.table[nt]
+	if !ok {
+		return nil, false
+	}
+	prod, ok := r[t]
+	if !ok {
+		return nil, false
+	}
+	return prod, true
+}
+
+var (
+	ErrParse = errors.New("parser error")
+)
+
+func (p *LL1Parser) parseSym(sym GrammarSym, tq *TokenQueue) (*LL1ParseTree, error) {
+	if sym.Term() {
+		token, ok := tq.Pop()
+		if !ok {
+			return nil, fmt.Errorf("Unexpected end of token stream: %w", ErrParse)
+		}
+		if sym.Kind() != token.Kind() {
+			return nil, fmt.Errorf("Unexpected token: %s: %w", token.Val(), ErrParse)
+		}
+		return NewLL1ParseTreeLeaf(sym, token), nil
+	}
+	next, ok := tq.Peek()
+	if !ok {
+		return nil, fmt.Errorf("Unexpected end of token stream: %w", ErrParse)
+	}
+	prod, ok := p.getProduction(sym.Kind(), next.Kind())
+	if !ok {
+		return nil, fmt.Errorf("Unexpected token: %s: %w", next.Val(), ErrParse)
+	}
+	children := []LL1ParseTree{}
+	for _, i := range prod {
+		n, err := p.parseSym(i, tq)
+		if err != nil {
+			return nil, err
+		}
+		children = append(children, *n)
+	}
+	return NewLL1ParseTree(sym, children), nil
+}
+
+func (p *LL1Parser) Parse(tokens []Token) (*LL1ParseTree, error) {
+	tq := NewTokenQueue(tokens)
+	root, err := p.parseSym(p.start, tq)
+	if err != nil {
+		return nil, err
+	}
+	last, ok := tq.Peek()
+	if !ok {
+		return nil, fmt.Errorf("Unexpected end of token stream: %w", ErrParse)
+	}
+	if p.eof.Kind() != last.Kind() {
+		return nil, fmt.Errorf("Unexpected token: %s: %w", last.Val(), ErrParse)
+	}
+	return root, nil
 }

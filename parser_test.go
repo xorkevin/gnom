@@ -2,7 +2,9 @@ package gnom
 
 import (
 	"errors"
+	"fmt"
 	"github.com/stretchr/testify/assert"
+	"strconv"
 	"testing"
 )
 
@@ -98,12 +100,12 @@ func TestCalcLL1NullableSet(t *testing.T) {
 	}{
 		{
 			rules: []GrammarRule{
-				NewGrammarRule(n1.Kind(), []GrammarSym{t1}),
-				NewGrammarRule(n1.Kind(), []GrammarSym{n2, t2}),
-				NewGrammarRule(n1.Kind(), []GrammarSym{n3, n4}),
-				NewGrammarRule(n2.Kind(), []GrammarSym{t1, t2}),
-				NewGrammarRule(n3.Kind(), []GrammarSym{n4}),
-				NewGrammarRule(n4.Kind(), []GrammarSym{}),
+				NewGrammarRule(n1, t1),
+				NewGrammarRule(n1, n2, t2),
+				NewGrammarRule(n1, n3, n4),
+				NewGrammarRule(n2, t1, t2),
+				NewGrammarRule(n3, n4),
+				NewGrammarRule(n4),
 			},
 			nullSet: map[int]struct{}{
 				n3.Kind(): {},
@@ -138,14 +140,14 @@ func TestCalcLL1FirstSet(t *testing.T) {
 	}{
 		{
 			rules: []GrammarRule{
-				NewGrammarRule(n1.Kind(), []GrammarSym{t3}),
-				NewGrammarRule(n1.Kind(), []GrammarSym{n3, t1}),
-				NewGrammarRule(n2.Kind(), []GrammarSym{t1, t2}),
-				NewGrammarRule(n2.Kind(), []GrammarSym{n4, n5, t2}),
-				NewGrammarRule(n3.Kind(), []GrammarSym{n4}),
-				NewGrammarRule(n3.Kind(), []GrammarSym{t4}),
-				NewGrammarRule(n4.Kind(), []GrammarSym{}),
-				NewGrammarRule(n5.Kind(), []GrammarSym{t5}),
+				NewGrammarRule(n1, t3),
+				NewGrammarRule(n1, n3, t1),
+				NewGrammarRule(n2, t1, t2),
+				NewGrammarRule(n2, n4, n5, t2),
+				NewGrammarRule(n3, n4),
+				NewGrammarRule(n3, t4),
+				NewGrammarRule(n4),
+				NewGrammarRule(n5, t5),
 			},
 			firstSet: map[int]map[int]struct{}{
 				n1.Kind(): {
@@ -193,13 +195,13 @@ func TestCalcLL1FollowSet(t *testing.T) {
 	}{
 		{
 			rules: []GrammarRule{
-				NewGrammarRule(n1.Kind(), []GrammarSym{t3, n2, t1}),
-				NewGrammarRule(n1.Kind(), []GrammarSym{t3, n2, n3}),
-				NewGrammarRule(n2.Kind(), []GrammarSym{t1, t2}),
-				NewGrammarRule(n3.Kind(), []GrammarSym{n4}),
-				NewGrammarRule(n3.Kind(), []GrammarSym{t4}),
-				NewGrammarRule(n4.Kind(), []GrammarSym{}),
-				NewGrammarRule(n5.Kind(), []GrammarSym{n1, t5}),
+				NewGrammarRule(n1, t3, n2, t1),
+				NewGrammarRule(n1, t3, n2, n3),
+				NewGrammarRule(n2, t1, t2),
+				NewGrammarRule(n3, n4),
+				NewGrammarRule(n3, t4),
+				NewGrammarRule(n4),
+				NewGrammarRule(n5, n1, t5),
 			},
 			followSet: map[int]map[int]struct{}{
 				n1.Kind(): {
@@ -228,7 +230,7 @@ func TestCalcLL1FollowSet(t *testing.T) {
 	}
 }
 
-func TestCalcNewLL1Parser(t *testing.T) {
+func TestNewLL1Parser(t *testing.T) {
 	assert := assert.New(t)
 
 	g := NewGrammarSymGenerator()
@@ -260,50 +262,50 @@ func TestCalcNewLL1Parser(t *testing.T) {
 	}{
 		{
 			rules: []GrammarRule{
-				NewGrammarRule(S.Kind(), []GrammarSym{B, C}),
+				NewGrammarRule(S, B, C),
 			},
 			err: ErrGrammar,
 		},
 		{
 			rules: []GrammarRule{
-				NewGrammarRule(S.Kind(), []GrammarSym{y, C, z}),
-				NewGrammarRule(B.Kind(), []GrammarSym{}),
-				NewGrammarRule(B.Kind(), []GrammarSym{z, y, S}),
-				NewGrammarRule(C.Kind(), []GrammarSym{y, B, C, C}),
-				NewGrammarRule(C.Kind(), []GrammarSym{}),
-				NewGrammarRule(C.Kind(), []GrammarSym{w, z}),
+				NewGrammarRule(S, y, C, z),
+				NewGrammarRule(B),
+				NewGrammarRule(B, z, y, S),
+				NewGrammarRule(C, y, B, C, C),
+				NewGrammarRule(C),
+				NewGrammarRule(C, w, z),
 			},
 			err: ErrGrammar,
 		},
 		{
 			rules: []GrammarRule{
-				NewGrammarRule(S.Kind(), []GrammarSym{B, x}),
-				NewGrammarRule(B.Kind(), []GrammarSym{}),
-				NewGrammarRule(B.Kind(), []GrammarSym{z, y, S, B}),
-				NewGrammarRule(B.Kind(), []GrammarSym{z, B, z}),
+				NewGrammarRule(S, B, x),
+				NewGrammarRule(B),
+				NewGrammarRule(B, z, y, S, B),
+				NewGrammarRule(B, z, B, z),
 			},
 			err: ErrGrammar,
 		},
 		{
 			rules: []GrammarRule{
-				NewGrammarRule(S.Kind(), []GrammarSym{B, w, S, S}),
-				NewGrammarRule(S.Kind(), []GrammarSym{}),
-				NewGrammarRule(S.Kind(), []GrammarSym{y}),
-				NewGrammarRule(B.Kind(), []GrammarSym{x}),
-				NewGrammarRule(B.Kind(), []GrammarSym{}),
+				NewGrammarRule(S, B, w, S, S),
+				NewGrammarRule(S),
+				NewGrammarRule(S, y),
+				NewGrammarRule(B, x),
+				NewGrammarRule(B),
 			},
 			err: ErrGrammar,
 		},
 		{
 			rules: []GrammarRule{
-				NewGrammarRule(S.Kind(), []GrammarSym{T, EP}),
-				NewGrammarRule(EP.Kind(), []GrammarSym{plus, T, EP}),
-				NewGrammarRule(EP.Kind(), []GrammarSym{}),
-				NewGrammarRule(T.Kind(), []GrammarSym{F, TP}),
-				NewGrammarRule(TP.Kind(), []GrammarSym{star, F, TP}),
-				NewGrammarRule(TP.Kind(), []GrammarSym{}),
-				NewGrammarRule(F.Kind(), []GrammarSym{id}),
-				NewGrammarRule(F.Kind(), []GrammarSym{lparen, S, rparen}),
+				NewGrammarRule(S, T, EP),
+				NewGrammarRule(EP, plus, T, EP),
+				NewGrammarRule(EP),
+				NewGrammarRule(T, F, TP),
+				NewGrammarRule(TP, star, F, TP),
+				NewGrammarRule(TP),
+				NewGrammarRule(F, id),
+				NewGrammarRule(F, lparen, S, rparen),
 			},
 			parseTable: map[int]map[int][]GrammarSym{
 				S.Kind(): {
@@ -312,18 +314,18 @@ func TestCalcNewLL1Parser(t *testing.T) {
 				},
 				EP.Kind(): {
 					plus.Kind():   {plus, T, EP},
-					rparen.Kind(): {},
-					eof.Kind():    {},
+					rparen.Kind(): nil,
+					eof.Kind():    nil,
 				},
 				T.Kind(): {
 					id.Kind():     {F, TP},
 					lparen.Kind(): {F, TP},
 				},
 				TP.Kind(): {
-					plus.Kind():   {},
+					plus.Kind():   nil,
 					star.Kind():   {star, F, TP},
-					rparen.Kind(): {},
-					eof.Kind():    {},
+					rparen.Kind(): nil,
+					eof.Kind():    nil,
 				},
 				F.Kind(): {
 					id.Kind():     {id},
@@ -332,13 +334,162 @@ func TestCalcNewLL1Parser(t *testing.T) {
 			},
 		},
 	} {
-		parser, err := NewLL1Parser(c.rules, S.Kind(), eof.Kind())
+		parser, err := NewLL1Parser(c.rules, S, eof)
 		if c.err != nil {
 			assert.Errorf(err, "Should fail to create parser: case %d", n)
 			assert.Truef(errors.Is(err, c.err), "Should fail to create parser: case %d", n)
 			continue
 		}
-		assert.NoErrorf(err, "Failed to create parser: case %d", n)
+		assert.NoErrorf(err, "Failed to create parser: case %d, %v", n, err)
 		assert.Equalf(c.parseTable, parser.table, "Fail case %d", n)
+	}
+}
+
+func TestLL1Parser_Parse(t *testing.T) {
+	assert := assert.New(t)
+
+	g := NewGrammarSymGenerator()
+
+	def := g.Term()
+	eof := g.Term()
+	wspace := g.Term()
+	S := g.NonTerm()
+
+	T := g.NonTerm()
+	SP := g.NonTerm()
+	TP := g.NonTerm()
+	F := g.NonTerm()
+	num := g.Term()
+	plus := g.Term()
+	star := g.Term()
+	lparen := g.Term()
+	rparen := g.Term()
+
+	dfa := NewDfa(def.Kind())
+	wspaceNode := NewDfa(wspace.Kind())
+	dfa.AddDfa([]rune(" "), wspaceNode)
+	wspaceNode.AddDfa([]rune(" "), wspaceNode)
+	numNode := NewDfa(num.Kind())
+	dfa.AddDfa([]rune("0123456789"), numNode)
+	numNode.AddDfa([]rune("0123456789"), numNode)
+	dfa.AddPath([]rune("+"), plus.Kind(), def.Kind())
+	dfa.AddPath([]rune("*"), star.Kind(), def.Kind())
+	dfa.AddPath([]rune("("), lparen.Kind(), def.Kind())
+	dfa.AddPath([]rune(")"), rparen.Kind(), def.Kind())
+	lexer := NewDfaLexer(dfa, def.Kind(), eof.Kind(), map[int]struct{}{
+		wspace.Kind(): {},
+	})
+
+	parser, err := NewLL1Parser([]GrammarRule{
+		NewGrammarRule(S, T, SP),
+		NewGrammarRule(SP, plus, T, SP),
+		NewGrammarRule(SP),
+		NewGrammarRule(T, F, TP),
+		NewGrammarRule(TP, star, F, TP),
+		NewGrammarRule(TP),
+		NewGrammarRule(F, num),
+		NewGrammarRule(F, lparen, S, rparen),
+	}, S, eof)
+	assert.NoErrorf(err, "Failed to create parser: %v", err)
+
+	var evalTree func(node LL1ParseTree) (int, error)
+	evalTree = func(node LL1ParseTree) (int, error) {
+		if node.Term() {
+			if node.Kind() == num.Kind() {
+				v, err := strconv.Atoi(node.Val())
+				if err != nil {
+					return 0, err
+				}
+				return v, nil
+			}
+			return 0, fmt.Errorf("Cannot eval")
+		}
+		children := node.Children()
+		switch node.Kind() {
+		case S.Kind():
+			v1, err := evalTree(children[0])
+			if err != nil {
+				return 0, err
+			}
+			v2, err := evalTree(children[1])
+			if err != nil {
+				return 0, err
+			}
+			return v1 + v2, nil
+		case SP.Kind():
+			if len(children) == 0 {
+				return 0, nil
+			}
+			v1, err := evalTree(children[1])
+			if err != nil {
+				return 0, err
+			}
+			v2, err := evalTree(children[2])
+			if err != nil {
+				return 0, err
+			}
+			return v1 + v2, nil
+		case T.Kind():
+			v1, err := evalTree(children[0])
+			if err != nil {
+				return 0, err
+			}
+			v2, err := evalTree(children[1])
+			if err != nil {
+				return 0, err
+			}
+			return v1 * v2, nil
+		case TP.Kind():
+			if len(children) == 0 {
+				return 1, nil
+			}
+			v1, err := evalTree(children[1])
+			if err != nil {
+				return 0, err
+			}
+			v2, err := evalTree(children[2])
+			if err != nil {
+				return 0, err
+			}
+			return v1 * v2, nil
+		case F.Kind():
+			if len(children) == 1 {
+				return evalTree(children[0])
+			}
+			return evalTree(children[1])
+		default:
+			return 0, fmt.Errorf("Cannot eval")
+		}
+	}
+
+	for _, c := range []struct {
+		text string
+		err  error
+		exp  int
+	}{
+		{
+			text: "1 + 2 + 3",
+			exp:  6,
+		},
+		{
+			text: "3 * 2 + 3",
+			exp:  9,
+		},
+		{
+			text: "3 * (2 + 3)",
+			exp:  15,
+		},
+	} {
+		tokens, err := lexer.Tokenize([]rune(c.text))
+		assert.NoErrorf(err, "Failed to tokenize %s: %v", c.text, err)
+		tree, err := parser.Parse(tokens)
+		if c.err != nil {
+			assert.Errorf(err, "Should fail to parse %s", c.text)
+			continue
+		}
+		assert.NoErrorf(err, "Failed to parse %s: %v", c.text, err)
+		v, err := evalTree(*tree)
+		assert.NoErrorf(err, "Failed to eval %s: %v", c.text, err)
+		assert.Equal(c.exp, v)
 	}
 }

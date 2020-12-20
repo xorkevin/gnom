@@ -75,7 +75,7 @@ func TestDfaLexer_Tokenize(t *testing.T) {
 	dfa.AddDfa([]rune("0123456789"), num)
 	num.AddDfa([]rune("0123456789"), num)
 	dfa.AddPath([]rune("+"), tokenAdd, tokenDefault)
-	dfa.AddPath([]rune("*"), tokenAdd, tokenDefault)
+	dfa.AddPath([]rune("*"), tokenMul, tokenDefault)
 	dfa.AddPath([]rune("int"), tokenValTypeInt, tokenDefault)
 
 	for _, c := range []struct {
