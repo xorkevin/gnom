@@ -17,6 +17,10 @@ func TestMinInt(t *testing.T) {
 			a: 1,
 			b: 2,
 		},
+		{
+			a: 4,
+			b: 3,
+		},
 	} {
 		assert.Equalf(minInt(c.a, c.b), minInt(c.b, c.a), "Minimum is not the same: %d, %d", c.a, c.b)
 		assert.LessOrEqualf(minInt(c.a, c.b), c.a, "Not minimum: %d, %d", c.a, c.b)
@@ -32,8 +36,16 @@ func TestToken(t *testing.T) {
 		val  string
 	}{
 		{
+			kind: 3,
+			val:  "dbe",
+		},
+		{
 			kind: 1,
-			val:  "abcd",
+			val:  "asdf",
+		},
+		{
+			kind: 4,
+			val:  "",
 		},
 	} {
 		token := NewToken(c.kind, c.val)

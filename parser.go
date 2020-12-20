@@ -35,6 +35,14 @@ func NewGrammarNonTerm(kind int) GrammarSym {
 	}
 }
 
+func (s *GrammarSym) Term() bool {
+	return s.term
+}
+
+func (s *GrammarSym) Kind() int {
+	return s.kind
+}
+
 func NewGrammarRule(from int, to []GrammarSym) GrammarRule {
 	return GrammarRule{
 		from: from,
