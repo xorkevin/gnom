@@ -42,7 +42,7 @@ func TestToken(t *testing.T) {
 	}
 }
 
-func TestLexer_Tokenize(t *testing.T) {
+func TestDfaLexer_Tokenize(t *testing.T) {
 	assert := assert.New(t)
 
 	const (
@@ -90,7 +90,7 @@ func TestLexer_Tokenize(t *testing.T) {
 			err:   ErrLex,
 		},
 	} {
-		lexer := NewLexer(dfa, tokenDefault, tokenEOF, map[int]struct{}{
+		lexer := NewDfaLexer(dfa, tokenDefault, tokenEOF, map[int]struct{}{
 			tokenWSpace: {},
 		})
 		tokens, err := lexer.Tokenize([]byte(c.chars))

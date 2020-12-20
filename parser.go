@@ -10,10 +10,6 @@ var (
 )
 
 type (
-	Parser struct {
-		table map[int]map[int][]GrammarSym
-	}
-
 	GrammarSym struct {
 		term bool
 		kind int
@@ -46,154 +42,234 @@ func NewGrammarRule(from int, to []GrammarSym) GrammarRule {
 	}
 }
 
-func NewParser(rules []GrammarRule, start, eof int) (*Parser, error) {
-	// nullable set
-	nonTerminals := map[int]struct{}{}
-	nullableSet := map[int]struct{}{}
-	for _, i := range rules {
-		nonTerminals[i.from] = struct{}{}
-		if len(i.to) == 0 {
-			nullableSet[i.from] = struct{}{}
-			continue
-		}
+type (
+	changeIntSet struct {
+		change bool
+		set    map[int]struct{}
 	}
-	for {
-		change := false
-	nullouter:
-		for _, i := range rules {
-			for _, j := range i.to {
-				if j.term {
-					continue nullouter
-				}
-				if _, ok := nullableSet[j.kind]; !ok {
-					continue nullouter
-				}
-			}
-			if _, ok := nullableSet[i.from]; !ok {
-				change = true
-				nullableSet[i.from] = struct{}{}
-			}
-		}
-		if !change {
-			break
-		}
-	}
+)
 
-	firstSet := map[int]map[int]struct{}{}
-	followSet := map[int]map[int]struct{}{}
-	parseTable := map[int]map[int][]GrammarSym{}
-	for nt := range nonTerminals {
-		firstSet[nt] = map[int]struct{}{}
-		followSet[nt] = map[int]struct{}{}
-		parseTable[nt] = map[int][]GrammarSym{}
+func newChangeIntSet() *changeIntSet {
+	return &changeIntSet{
+		change: false,
+		set:    map[int]struct{}{},
 	}
+}
 
-	// first set
-	for _, i := range rules {
-		if len(i.to) != 0 && i.to[0].term {
-			firstSet[i.from][i.to[0].kind] = struct{}{}
+func (s *changeIntSet) resetChanged() {
+	s.change = false
+}
+
+func (s *changeIntSet) isChanged() bool {
+	return s.change
+}
+
+func (s *changeIntSet) iter() map[int]struct{} {
+	return s.set
+}
+
+func (s *changeIntSet) contains(k int) bool {
+	_, ok := s.set[k]
+	return ok
+}
+
+func (s *changeIntSet) upsert(k int) {
+	if _, ok := s.set[k]; !ok {
+		s.change = true
+		s.set[k] = struct{}{}
+	}
+}
+
+func (s *changeIntSet) upsertAll(m map[int]struct{}) {
+	for k := range m {
+		s.upsert(k)
+	}
+}
+
+type (
+	changeIntIntSet struct {
+		change bool
+		set    map[int]map[int]struct{}
+	}
+)
+
+func newChangeIntIntSet() *changeIntIntSet {
+	return &changeIntIntSet{
+		change: false,
+		set:    map[int]map[int]struct{}{},
+	}
+}
+
+func (s *changeIntIntSet) resetChanged() {
+	s.change = false
+}
+
+func (s *changeIntIntSet) isChanged() bool {
+	return s.change
+}
+
+func (s *changeIntIntSet) iter(a int) map[int]struct{} {
+	if v, ok := s.set[a]; ok {
+		return v
+	}
+	return map[int]struct{}{}
+}
+
+func (s *changeIntIntSet) contains(a, b int) bool {
+	v, ok := s.set[a]
+	if !ok {
+		return false
+	}
+	_, ok = v[b]
+	return ok
+}
+
+func (s *changeIntIntSet) upsert(a, b int) {
+	if _, ok := s.set[a]; !ok {
+		s.set[a] = map[int]struct{}{}
+	}
+	if _, ok := s.set[a][b]; !ok {
+		s.change = true
+		s.set[a][b] = struct{}{}
+	}
+}
+
+func (s *changeIntIntSet) upsertAll(a int, m map[int]struct{}) {
+	for k := range m {
+		s.upsert(a, k)
+	}
+}
+
+func isLL1Nullable(syms []GrammarSym, nullableSet *changeIntSet) bool {
+	for _, i := range syms {
+		if i.term {
+			return false
+		}
+		if !nullableSet.contains(i.kind) {
+			return false
 		}
 	}
+	return true
+}
+
+func calcLL1NullableSet(rules []GrammarRule) *changeIntSet {
+	set := newChangeIntSet()
 	for {
-		change := false
+		set.resetChanged()
 		for _, i := range rules {
-			for _, j := range i.to {
-				if j.term {
-					if _, ok := firstSet[i.from][j.kind]; !ok {
-						change = true
-						firstSet[i.from][j.kind] = struct{}{}
-					}
-					break
-				}
-				for k := range firstSet[j.kind] {
-					if _, ok := firstSet[i.from][k]; !ok {
-						change = true
-						firstSet[i.from][k] = struct{}{}
-					}
-				}
-				if _, ok := nullableSet[j.kind]; !ok {
-					break
-				}
+			if isLL1Nullable(i.to, set) {
+				set.upsert(i.from)
 			}
 		}
-		if !change {
-			break
+		if !set.isChanged() {
+			return set
 		}
 	}
+}
 
-	// follow set
-	followSet[start][eof] = struct{}{}
+func calcLL1First(syms []GrammarSym, firstSet *changeIntIntSet, nullableSet *changeIntSet) map[int]struct{} {
+	set := newChangeIntSet()
+	for _, i := range syms {
+		if i.term {
+			set.upsert(i.kind)
+			return set.iter()
+		}
+		set.upsertAll(firstSet.iter(i.kind))
+		if !nullableSet.contains(i.kind) {
+			return set.iter()
+		}
+	}
+	return set.iter()
+}
+
+func calcLL1FirstSet(rules []GrammarRule, nullableSet *changeIntSet) *changeIntIntSet {
+	set := newChangeIntIntSet()
 	for {
-		change := false
+		set.resetChanged()
 		for _, i := range rules {
-		followouter:
+			set.upsertAll(i.from, calcLL1First(i.to, set, nullableSet))
+		}
+		if !set.isChanged() {
+			return set
+		}
+	}
+}
+
+func calcLL1FollowSet(rules []GrammarRule, start, eof int, firstSet *changeIntIntSet, nullableSet *changeIntSet) *changeIntIntSet {
+	set := newChangeIntIntSet()
+	set.upsert(start, eof)
+	for {
+		set.resetChanged()
+		for _, i := range rules {
 			for n, j := range i.to {
 				if j.term {
 					continue
 				}
-				for _, k := range i.to[n+1:] {
-					if k.term {
-						if _, ok := followSet[j.kind][k.kind]; !ok {
-							change = true
-							followSet[j.kind][k.kind] = struct{}{}
-						}
-						continue followouter
-					}
-					for l := range firstSet[k.kind] {
-						if _, ok := followSet[j.kind][l]; !ok {
-							change = true
-							followSet[j.kind][l] = struct{}{}
-						}
-					}
-					if _, ok := nullableSet[k.kind]; !ok {
-						continue followouter
-					}
-				}
-				for k := range followSet[i.from] {
-					if _, ok := followSet[j.kind][k]; !ok {
-						change = true
-						followSet[j.kind][k] = struct{}{}
-					}
+				b := i.to[n+1:]
+				set.upsertAll(j.kind, calcLL1First(b, firstSet, nullableSet))
+				if isLL1Nullable(b, nullableSet) {
+					set.upsertAll(j.kind, set.iter(i.from))
 				}
 			}
 		}
-		if !change {
-			break
+		if !set.isChanged() {
+			return set
 		}
 	}
+}
 
-	// parsing table
+func calcLL1ParseTable(rules []GrammarRule, nonTerminals *changeIntSet, nullableSet *changeIntSet, firstSet *changeIntIntSet, followSet *changeIntIntSet) (map[int]map[int][]GrammarSym, error) {
+	table := map[int]map[int][]GrammarSym{}
+	for nt := range nonTerminals.iter() {
+		table[nt] = map[int][]GrammarSym{}
+	}
+	for n, i := range rules {
+		for j := range calcLL1First(i.to, firstSet, nullableSet) {
+			if _, ok := table[i.from][j]; ok {
+				return nil, fmt.Errorf("Grammar is not LL1: duplicate rule: %d: %w", n, ErrGrammar)
+			}
+			table[i.from][j] = i.to
+		}
+		if isLL1Nullable(i.to, nullableSet) {
+			for j := range followSet.iter(i.from) {
+				if _, ok := table[i.from][j]; ok {
+					return nil, fmt.Errorf("Grammar is not LL1: duplicate rule: %d: %w", n, ErrGrammar)
+				}
+				table[i.from][j] = i.to
+			}
+		}
+	}
+	return table, nil
+}
+
+type (
+	LL1Parser struct {
+		table map[int]map[int][]GrammarSym
+	}
+)
+
+func NewLL1Parser(rules []GrammarRule, start, eof int) (*LL1Parser, error) {
+	nonTerminals := newChangeIntSet()
+	for _, i := range rules {
+		nonTerminals.upsert(i.from)
+	}
 	for _, i := range rules {
 		for _, j := range i.to {
-			if j.term {
-				if _, ok := parseTable[i.from][j.kind]; ok {
-					return nil, fmt.Errorf("Grammar is not LL1: %w", ErrGrammar)
-				}
-				parseTable[i.from][j.kind] = i.to
-				break
+			if !j.term && nonTerminals.contains(j.kind) {
+				return nil, fmt.Errorf("Nonterminal lacks production rule: %d: %w", j.kind, ErrGrammar)
 			}
-			for k := range firstSet[j.kind] {
-				if _, ok := parseTable[i.from][k]; ok {
-					return nil, fmt.Errorf("Grammar is not LL1: %w", ErrGrammar)
-				}
-				parseTable[i.from][k] = i.to
-			}
-			if _, ok := nullableSet[j.kind]; !ok {
-				break
-			}
-		}
-		if _, ok := nullableSet[i.from]; !ok {
-			continue
-		}
-		for j := range followSet[i.from] {
-			if _, ok := parseTable[i.from][j]; ok {
-				return nil, fmt.Errorf("Grammar is not LL1: %w", ErrGrammar)
-			}
-			parseTable[i.from][j] = i.to
 		}
 	}
+	nullableSet := calcLL1NullableSet(rules)
+	firstSet := calcLL1FirstSet(rules, nullableSet)
+	followSet := calcLL1FollowSet(rules, start, eof, firstSet, nullableSet)
 
-	return &Parser{
+	parseTable, err := calcLL1ParseTable(rules, nonTerminals, nullableSet, firstSet, followSet)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LL1Parser{
 		table: parseTable,
 	}, nil
 }

@@ -52,13 +52,6 @@ func (d *Dfa) Kind() int {
 }
 
 type (
-	Lexer struct {
-		dfa     *Dfa
-		def     int
-		eof     int
-		ignored map[int]struct{}
-	}
-
 	Token struct {
 		kind int
 		val  string
@@ -80,8 +73,17 @@ func (t *Token) Val() string {
 	return t.val
 }
 
-func NewLexer(dfa *Dfa, def, eof int, ignored map[int]struct{}) *Lexer {
-	return &Lexer{
+type (
+	DfaLexer struct {
+		dfa     *Dfa
+		def     int
+		eof     int
+		ignored map[int]struct{}
+	}
+)
+
+func NewDfaLexer(dfa *Dfa, def, eof int, ignored map[int]struct{}) *DfaLexer {
+	return &DfaLexer{
 		dfa:     dfa,
 		def:     def,
 		eof:     eof,
@@ -100,7 +102,7 @@ func minInt(a, b int) int {
 	return a
 }
 
-func (l *Lexer) Next(chars []byte) (*Token, []byte, error) {
+func (l *DfaLexer) Next(chars []byte) (*Token, []byte, error) {
 	s := &strings.Builder{}
 	n := l.dfa
 	for {
@@ -122,7 +124,7 @@ func (l *Lexer) Next(chars []byte) (*Token, []byte, error) {
 	return &Token{kind: n.Kind(), val: s.String()}, chars, nil
 }
 
-func (l *Lexer) Tokenize(chars []byte) ([]Token, error) {
+func (l *DfaLexer) Tokenize(chars []byte) ([]Token, error) {
 	tokens := []Token{}
 	for {
 		t, next, err := l.Next(chars)
