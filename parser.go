@@ -264,73 +264,91 @@ func calcLL1ParseTable(rules []GrammarRule, nonTerminals *changeIntSet, nullable
 }
 
 type (
-	TokenQueue struct {
+	TokenStack struct {
 		tokens []Token
+		buf    []Token
 	}
 )
 
-func NewTokenQueue(tokens []Token) *TokenQueue {
-	return &TokenQueue{
+func NewTokenStack(tokens []Token) *TokenStack {
+	return &TokenStack{
 		tokens: tokens,
+		buf:    []Token{},
 	}
 }
 
-func (q *TokenQueue) Empty() bool {
-	return len(q.tokens) == 0
+func (s *TokenStack) Empty() bool {
+	return len(s.tokens) == 0 && len(s.buf) == 0
 }
 
-func (q *TokenQueue) Pop() (Token, bool) {
-	if q.Empty() {
-		return Token{}, false
+func (s *TokenStack) Pop() (Token, bool) {
+	if len(s.buf) == 0 {
+		if len(s.tokens) == 0 {
+			return Token{}, false
+		}
+		k := s.tokens[0]
+		s.tokens = s.tokens[1:]
+		return k, true
 	}
-	k := q.tokens[0]
-	q.tokens = q.tokens[1:]
+	k := s.buf[len(s.buf)-1]
+	s.buf = s.buf[:len(s.buf)-1]
 	return k, true
 }
 
-func (q *TokenQueue) Peek() (Token, bool) {
-	if q.Empty() {
-		return Token{}, false
+func (s *TokenStack) Peek() (Token, bool) {
+	if len(s.buf) == 0 {
+		if len(s.tokens) == 0 {
+			return Token{}, false
+		}
+		return s.tokens[0], true
 	}
-	return q.tokens[0], true
+	return s.buf[len(s.buf)-1], true
+}
+
+func (s *TokenStack) Push(t Token) {
+	s.buf = append(s.buf, t)
 }
 
 type (
-	LL1ParseTree struct {
+	ParseTree struct {
 		sym      GrammarSym
 		token    Token
-		children []LL1ParseTree
+		children []ParseTree
 	}
 )
 
-func NewLL1ParseTree(sym GrammarSym, children []LL1ParseTree) *LL1ParseTree {
-	return &LL1ParseTree{
+func NewParseTree(sym GrammarSym) *ParseTree {
+	return &ParseTree{
 		sym:      sym,
-		children: children,
+		children: []ParseTree{},
 	}
 }
 
-func NewLL1ParseTreeLeaf(sym GrammarSym, token Token) *LL1ParseTree {
-	return &LL1ParseTree{
+func NewParseTreeLeaf(sym GrammarSym, token Token) *ParseTree {
+	return &ParseTree{
 		sym:   sym,
 		token: token,
 	}
 }
 
-func (t *LL1ParseTree) Term() bool {
+func (t *ParseTree) Term() bool {
 	return t.sym.Term()
 }
 
-func (t *LL1ParseTree) Kind() int {
+func (t *ParseTree) Kind() int {
 	return t.sym.Kind()
 }
 
-func (t *LL1ParseTree) Val() string {
+func (t *ParseTree) Val() string {
 	return t.token.Val()
 }
 
-func (t *LL1ParseTree) Children() []LL1ParseTree {
+func (t *ParseTree) Children() []ParseTree {
 	return t.children
+}
+
+func (t *ParseTree) AddChild(child ParseTree) {
+	t.children = append(t.children, child)
 }
 
 type (
@@ -385,18 +403,18 @@ var (
 	ErrParse = errors.New("parser error")
 )
 
-func (p *LL1Parser) parseSym(sym GrammarSym, tq *TokenQueue) (*LL1ParseTree, error) {
+func (p *LL1Parser) parseSym(sym GrammarSym, ts *TokenStack) (*ParseTree, error) {
 	if sym.Term() {
-		token, ok := tq.Pop()
+		token, ok := ts.Pop()
 		if !ok {
 			return nil, fmt.Errorf("Unexpected end of token stream: %w", ErrParse)
 		}
 		if sym.Kind() != token.Kind() {
 			return nil, fmt.Errorf("Unexpected token: %s: %w", token.Val(), ErrParse)
 		}
-		return NewLL1ParseTreeLeaf(sym, token), nil
+		return NewParseTreeLeaf(sym, token), nil
 	}
-	next, ok := tq.Peek()
+	next, ok := ts.Peek()
 	if !ok {
 		return nil, fmt.Errorf("Unexpected end of token stream: %w", ErrParse)
 	}
@@ -404,24 +422,24 @@ func (p *LL1Parser) parseSym(sym GrammarSym, tq *TokenQueue) (*LL1ParseTree, err
 	if !ok {
 		return nil, fmt.Errorf("Unexpected token: %s: %w", next.Val(), ErrParse)
 	}
-	children := []LL1ParseTree{}
+	tree := NewParseTree(sym)
 	for _, i := range prod {
-		n, err := p.parseSym(i, tq)
+		n, err := p.parseSym(i, ts)
 		if err != nil {
 			return nil, err
 		}
-		children = append(children, *n)
+		tree.AddChild(*n)
 	}
-	return NewLL1ParseTree(sym, children), nil
+	return tree, nil
 }
 
-func (p *LL1Parser) Parse(tokens []Token) (*LL1ParseTree, error) {
-	tq := NewTokenQueue(tokens)
-	root, err := p.parseSym(p.start, tq)
+func (p *LL1Parser) Parse(tokens []Token) (*ParseTree, error) {
+	ts := NewTokenStack(tokens)
+	root, err := p.parseSym(p.start, ts)
 	if err != nil {
 		return nil, err
 	}
-	last, ok := tq.Peek()
+	last, ok := ts.Peek()
 	if !ok {
 		return nil, fmt.Errorf("Unexpected end of token stream: %w", ErrParse)
 	}
