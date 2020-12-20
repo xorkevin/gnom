@@ -15,6 +15,10 @@ type (
 		kind int
 	}
 
+	GrammarSymGenerator struct {
+		i int
+	}
+
 	GrammarRule struct {
 		from int
 		to   []GrammarSym
@@ -48,6 +52,24 @@ func NewGrammarRule(from int, to []GrammarSym) GrammarRule {
 		from: from,
 		to:   to,
 	}
+}
+
+func NewGrammarSymGenerator() *GrammarSymGenerator {
+	return &GrammarSymGenerator{
+		i: 0,
+	}
+}
+
+func (g *GrammarSymGenerator) Term() GrammarSym {
+	s := NewGrammarTerm(g.i)
+	g.i++
+	return s
+}
+
+func (g *GrammarSymGenerator) NonTerm() GrammarSym {
+	s := NewGrammarNonTerm(g.i)
+	g.i++
+	return s
 }
 
 type (
@@ -121,15 +143,6 @@ func (s *changeIntIntSet) iter(a int) map[int]struct{} {
 		return v
 	}
 	return map[int]struct{}{}
-}
-
-func (s *changeIntIntSet) contains(a, b int) bool {
-	v, ok := s.set[a]
-	if !ok {
-		return false
-	}
-	_, ok = v[b]
-	return ok
 }
 
 func (s *changeIntIntSet) upsert(a, b int) {
@@ -263,7 +276,7 @@ func NewLL1Parser(rules []GrammarRule, start, eof int) (*LL1Parser, error) {
 	}
 	for _, i := range rules {
 		for _, j := range i.to {
-			if !j.term && nonTerminals.contains(j.kind) {
+			if !j.term && !nonTerminals.contains(j.kind) {
 				return nil, fmt.Errorf("Nonterminal lacks production rule: %d: %w", j.kind, ErrGrammar)
 			}
 		}

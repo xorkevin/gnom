@@ -1,6 +1,7 @@
 package gnom
 
 import (
+	"errors"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -74,12 +75,14 @@ func TestIsLL1Nullable(t *testing.T) {
 func TestCalcLL1NullableSet(t *testing.T) {
 	assert := assert.New(t)
 
-	n1 := NewGrammarNonTerm(1)
-	n2 := NewGrammarNonTerm(2)
-	n3 := NewGrammarNonTerm(3)
-	n4 := NewGrammarNonTerm(4)
-	t1 := NewGrammarTerm(1)
-	t2 := NewGrammarTerm(2)
+	g := NewGrammarSymGenerator()
+
+	n1 := g.NonTerm()
+	n2 := g.NonTerm()
+	n3 := g.NonTerm()
+	n4 := g.NonTerm()
+	t1 := g.Term()
+	t2 := g.Term()
 
 	for n, c := range []struct {
 		rules   []GrammarRule
@@ -108,16 +111,18 @@ func TestCalcLL1NullableSet(t *testing.T) {
 func TestCalcLL1FirstSet(t *testing.T) {
 	assert := assert.New(t)
 
-	n1 := NewGrammarNonTerm(1)
-	n2 := NewGrammarNonTerm(2)
-	n3 := NewGrammarNonTerm(3)
-	n4 := NewGrammarNonTerm(4)
-	n5 := NewGrammarNonTerm(5)
-	t1 := NewGrammarTerm(1)
-	t2 := NewGrammarTerm(2)
-	t3 := NewGrammarTerm(3)
-	t4 := NewGrammarTerm(4)
-	t5 := NewGrammarTerm(5)
+	g := NewGrammarSymGenerator()
+
+	n1 := g.NonTerm()
+	n2 := g.NonTerm()
+	n3 := g.NonTerm()
+	n4 := g.NonTerm()
+	n5 := g.NonTerm()
+	t1 := g.Term()
+	t2 := g.Term()
+	t3 := g.Term()
+	t4 := g.Term()
+	t5 := g.Term()
 
 	for n, c := range []struct {
 		rules    []GrammarRule
@@ -154,5 +159,158 @@ func TestCalcLL1FirstSet(t *testing.T) {
 		},
 	} {
 		assert.Equalf(c.firstSet, calcLL1FirstSet(c.rules, calcLL1NullableSet(c.rules)).set, "Fail case %d", n)
+	}
+}
+
+func TestCalcLL1FollowSet(t *testing.T) {
+	assert := assert.New(t)
+
+	g := NewGrammarSymGenerator()
+
+	n1 := g.NonTerm()
+	n2 := g.NonTerm()
+	n3 := g.NonTerm()
+	n4 := g.NonTerm()
+	n5 := g.NonTerm()
+	eof := g.Term()
+	t1 := g.Term()
+	t2 := g.Term()
+	t3 := g.Term()
+	t4 := g.Term()
+	t5 := g.Term()
+
+	for n, c := range []struct {
+		rules     []GrammarRule
+		followSet map[int]map[int]struct{}
+	}{
+		{
+			rules: []GrammarRule{
+				NewGrammarRule(n1.Kind(), []GrammarSym{t3, n2, t1}),
+				NewGrammarRule(n1.Kind(), []GrammarSym{t3, n2, n3}),
+				NewGrammarRule(n2.Kind(), []GrammarSym{t1, t2}),
+				NewGrammarRule(n3.Kind(), []GrammarSym{n4}),
+				NewGrammarRule(n3.Kind(), []GrammarSym{t4}),
+				NewGrammarRule(n4.Kind(), []GrammarSym{}),
+				NewGrammarRule(n5.Kind(), []GrammarSym{n1, t5}),
+			},
+			followSet: map[int]map[int]struct{}{
+				n1.Kind(): {
+					eof.Kind(): {},
+					t5.Kind():  {},
+				},
+				n2.Kind(): {
+					t1.Kind():  {},
+					t4.Kind():  {},
+					t5.Kind():  {},
+					eof.Kind(): {},
+				},
+				n3.Kind(): {
+					eof.Kind(): {},
+					t5.Kind():  {},
+				},
+				n4.Kind(): {
+					eof.Kind(): {},
+					t5.Kind():  {},
+				},
+			},
+		},
+	} {
+		nullSet := calcLL1NullableSet(c.rules)
+		assert.Equalf(c.followSet, calcLL1FollowSet(c.rules, n1.Kind(), eof.Kind(), calcLL1FirstSet(c.rules, nullSet), nullSet).set, "Fail case %d", n)
+	}
+}
+
+func TestCalcNewLL1Parser(t *testing.T) {
+	assert := assert.New(t)
+
+	g := NewGrammarSymGenerator()
+
+	S := g.NonTerm()
+	eof := g.Term()
+
+	B := g.NonTerm()
+	C := g.NonTerm()
+	w := g.Term()
+	y := g.Term()
+	z := g.Term()
+
+	EP := g.NonTerm()
+	T := g.NonTerm()
+	TP := g.NonTerm()
+	F := g.NonTerm()
+	id := g.Term()
+	plus := g.Term()
+	star := g.Term()
+	lparen := g.Term()
+	rparen := g.Term()
+
+	for n, c := range []struct {
+		rules      []GrammarRule
+		err        error
+		parseTable map[int]map[int][]GrammarSym
+	}{
+		{
+			rules: []GrammarRule{
+				NewGrammarRule(S.Kind(), []GrammarSym{B, C}),
+			},
+			err: ErrGrammar,
+		},
+		{
+			rules: []GrammarRule{
+				NewGrammarRule(S.Kind(), []GrammarSym{y, C, z}),
+				NewGrammarRule(B.Kind(), []GrammarSym{}),
+				NewGrammarRule(B.Kind(), []GrammarSym{z, y, S}),
+				NewGrammarRule(C.Kind(), []GrammarSym{y, B, C, C}),
+				NewGrammarRule(C.Kind(), []GrammarSym{}),
+				NewGrammarRule(C.Kind(), []GrammarSym{w, z}),
+			},
+			err: ErrGrammar,
+		},
+		{
+			rules: []GrammarRule{
+				NewGrammarRule(S.Kind(), []GrammarSym{T, EP}),
+				NewGrammarRule(EP.Kind(), []GrammarSym{plus, T, EP}),
+				NewGrammarRule(EP.Kind(), []GrammarSym{}),
+				NewGrammarRule(T.Kind(), []GrammarSym{F, TP}),
+				NewGrammarRule(TP.Kind(), []GrammarSym{star, F, TP}),
+				NewGrammarRule(TP.Kind(), []GrammarSym{}),
+				NewGrammarRule(F.Kind(), []GrammarSym{id}),
+				NewGrammarRule(F.Kind(), []GrammarSym{lparen, S, rparen}),
+			},
+			parseTable: map[int]map[int][]GrammarSym{
+				S.Kind(): {
+					id.Kind():     {T, EP},
+					lparen.Kind(): {T, EP},
+				},
+				EP.Kind(): {
+					plus.Kind():   {plus, T, EP},
+					rparen.Kind(): {},
+					eof.Kind():    {},
+				},
+				T.Kind(): {
+					id.Kind():     {F, TP},
+					lparen.Kind(): {F, TP},
+				},
+				TP.Kind(): {
+					plus.Kind():   {},
+					star.Kind():   {star, F, TP},
+					rparen.Kind(): {},
+					eof.Kind():    {},
+				},
+				F.Kind(): {
+					id.Kind():     {id},
+					lparen.Kind(): {lparen, S, rparen},
+				},
+			},
+		},
+	} {
+		parser, err := NewLL1Parser(c.rules, S.Kind(), eof.Kind())
+		if c.err != nil {
+			assert.Errorf(err, "Should fail to create parser: case %d", n)
+			assert.Truef(errors.Is(err, c.err), "Should fail to create parser: case %d", n)
+			continue
+		}
+		assert.NoErrorf(err, "Failed to create parser: case %d", n)
+		assert.Equalf(c.parseTable, parser.table, "Fail case %d", n)
 	}
 }
