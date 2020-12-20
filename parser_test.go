@@ -40,11 +40,19 @@ func TestGrammarSym(t *testing.T) {
 func TestIsLL1Nullable(t *testing.T) {
 	assert := assert.New(t)
 
+	g := NewGrammarSymGenerator()
+
+	n3 := g.NonTerm()
+	n1 := g.NonTerm()
+	n4 := g.NonTerm()
+	t1 := g.Term()
+	t3 := g.Term()
+
 	nullableSet := newChangeIntSet()
 	nullableSet.upsertAll(map[int]struct{}{
-		3: {},
-		1: {},
-		4: {},
+		n3.Kind(): {},
+		n1.Kind(): {},
+		n4.Kind(): {},
 	})
 
 	for n, c := range []struct {
@@ -52,19 +60,19 @@ func TestIsLL1Nullable(t *testing.T) {
 		exp  bool
 	}{
 		{
-			syms: []GrammarSym{NewGrammarNonTerm(3)},
+			syms: []GrammarSym{n3},
 			exp:  true,
 		},
 		{
-			syms: []GrammarSym{NewGrammarNonTerm(3), NewGrammarNonTerm(1), NewGrammarNonTerm(4)},
+			syms: []GrammarSym{n3, n1, n4},
 			exp:  true,
 		},
 		{
-			syms: []GrammarSym{NewGrammarNonTerm(3), NewGrammarTerm(1), NewGrammarNonTerm(4)},
+			syms: []GrammarSym{n3, t1, n4},
 			exp:  false,
 		},
 		{
-			syms: []GrammarSym{NewGrammarTerm(3)},
+			syms: []GrammarSym{t3},
 			exp:  false,
 		},
 	} {
@@ -231,6 +239,7 @@ func TestCalcNewLL1Parser(t *testing.T) {
 	B := g.NonTerm()
 	C := g.NonTerm()
 	w := g.Term()
+	x := g.Term()
 	y := g.Term()
 	z := g.Term()
 
@@ -263,6 +272,25 @@ func TestCalcNewLL1Parser(t *testing.T) {
 				NewGrammarRule(C.Kind(), []GrammarSym{y, B, C, C}),
 				NewGrammarRule(C.Kind(), []GrammarSym{}),
 				NewGrammarRule(C.Kind(), []GrammarSym{w, z}),
+			},
+			err: ErrGrammar,
+		},
+		{
+			rules: []GrammarRule{
+				NewGrammarRule(S.Kind(), []GrammarSym{B, x}),
+				NewGrammarRule(B.Kind(), []GrammarSym{}),
+				NewGrammarRule(B.Kind(), []GrammarSym{z, y, S, B}),
+				NewGrammarRule(B.Kind(), []GrammarSym{z, B, z}),
+			},
+			err: ErrGrammar,
+		},
+		{
+			rules: []GrammarRule{
+				NewGrammarRule(S.Kind(), []GrammarSym{B, w, S, S}),
+				NewGrammarRule(S.Kind(), []GrammarSym{}),
+				NewGrammarRule(S.Kind(), []GrammarSym{y}),
+				NewGrammarRule(B.Kind(), []GrammarSym{x}),
+				NewGrammarRule(B.Kind(), []GrammarSym{}),
 			},
 			err: ErrGrammar,
 		},
