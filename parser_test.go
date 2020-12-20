@@ -392,8 +392,8 @@ func TestLL1Parser_Parse(t *testing.T) {
 	}, S, eof)
 	assert.NoErrorf(err, "Failed to create parser: %v", err)
 
-	var evalTree func(node ParseTree) (int, error)
-	evalTree = func(node ParseTree) (int, error) {
+	var evalTree func(node *ParseTree) (int, error)
+	evalTree = func(node *ParseTree) (int, error) {
 		if node.Term() {
 			if node.Kind() == num.Kind() {
 				v, err := strconv.Atoi(node.Val())
@@ -488,7 +488,7 @@ func TestLL1Parser_Parse(t *testing.T) {
 			continue
 		}
 		assert.NoErrorf(err, "Failed to parse %s: %v", c.text, err)
-		v, err := evalTree(*tree)
+		v, err := evalTree(tree)
 		assert.NoErrorf(err, "Failed to eval %s: %v", c.text, err)
 		assert.Equal(c.exp, v)
 	}

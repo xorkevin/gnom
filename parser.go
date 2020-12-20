@@ -313,21 +313,22 @@ type (
 	ParseTree struct {
 		sym      GrammarSym
 		token    Token
-		children []ParseTree
+		children []*ParseTree
 	}
 )
 
 func NewParseTree(sym GrammarSym) *ParseTree {
 	return &ParseTree{
 		sym:      sym,
-		children: []ParseTree{},
+		children: []*ParseTree{},
 	}
 }
 
 func NewParseTreeLeaf(sym GrammarSym, token Token) *ParseTree {
 	return &ParseTree{
-		sym:   sym,
-		token: token,
+		sym:      sym,
+		token:    token,
+		children: []*ParseTree{},
 	}
 }
 
@@ -339,16 +340,87 @@ func (t *ParseTree) Kind() int {
 	return t.sym.Kind()
 }
 
+func (t *ParseTree) Sym() GrammarSym {
+	return t.sym
+}
+
 func (t *ParseTree) Val() string {
 	return t.token.Val()
 }
 
-func (t *ParseTree) Children() []ParseTree {
+func (t *ParseTree) Token() Token {
+	return t.token
+}
+
+func (t *ParseTree) Children() []*ParseTree {
 	return t.children
 }
 
-func (t *ParseTree) AddChild(child ParseTree) {
+func (t *ParseTree) AddChild(child *ParseTree) {
 	t.children = append(t.children, child)
+}
+
+type (
+	SymMatcher struct {
+		syms []GrammarSym
+		node *ParseTree
+	}
+)
+
+func NewSymMatcher(syms []GrammarSym, node *ParseTree) *SymMatcher {
+	return &SymMatcher{
+		syms: syms,
+		node: node,
+	}
+}
+
+func (m *SymMatcher) Done() bool {
+	return len(m.syms) == 0
+}
+
+func (m *SymMatcher) First() (GrammarSym, bool) {
+	if len(m.syms) == 0 {
+		return GrammarSym{}, false
+	}
+	return m.syms[0], true
+}
+
+func (m *SymMatcher) Match(node *ParseTree) bool {
+	if len(m.syms) == 0 {
+		return false
+	}
+	m.syms = m.syms[1:]
+	m.node.AddChild(node)
+	return true
+}
+
+type (
+	SymMatcherStack struct {
+		stack []*SymMatcher
+	}
+)
+
+func NewSymMatcherStack() *SymMatcherStack {
+	return &SymMatcherStack{
+		stack: []*SymMatcher{},
+	}
+}
+
+func (s *SymMatcherStack) Empty() bool {
+	return len(s.stack) == 0
+}
+
+func (s *SymMatcherStack) Push(m *SymMatcher) {
+	s.stack = append(s.stack, m)
+}
+
+func (s *SymMatcherStack) Pop() (*SymMatcher, bool) {
+	if s.Empty() {
+		return nil, false
+	}
+	k := s.stack[len(s.stack)-1]
+	s.stack = s.stack[:len(s.stack)-1]
+	return k, true
 }
 
 type (
@@ -400,51 +472,53 @@ func (p *LL1Parser) getProduction(nt, t int) ([]GrammarSym, bool) {
 }
 
 var (
-	ErrParse = errors.New("parser error")
+	ErrParse         = errors.New("parser error")
+	ErrParseInternal = errors.New("internal parser error")
 )
-
-func (p *LL1Parser) parseSym(sym GrammarSym, ts *TokenStack) (*ParseTree, error) {
-	if sym.Term() {
-		token, ok := ts.Pop()
-		if !ok {
-			return nil, fmt.Errorf("Unexpected end of token stream: %w", ErrParse)
-		}
-		if sym.Kind() != token.Kind() {
-			return nil, fmt.Errorf("Unexpected token: %s: %w", token.Val(), ErrParse)
-		}
-		return NewParseTreeLeaf(sym, token), nil
-	}
-	next, ok := ts.Peek()
-	if !ok {
-		return nil, fmt.Errorf("Unexpected end of token stream: %w", ErrParse)
-	}
-	prod, ok := p.getProduction(sym.Kind(), next.Kind())
-	if !ok {
-		return nil, fmt.Errorf("Unexpected token: %s: %w", next.Val(), ErrParse)
-	}
-	tree := NewParseTree(sym)
-	for _, i := range prod {
-		n, err := p.parseSym(i, ts)
-		if err != nil {
-			return nil, err
-		}
-		tree.AddChild(*n)
-	}
-	return tree, nil
-}
 
 func (p *LL1Parser) Parse(tokens []Token) (*ParseTree, error) {
 	ts := NewTokenStack(tokens)
-	root, err := p.parseSym(p.start, ts)
-	if err != nil {
-		return nil, err
+	sm := NewSymMatcherStack()
+	root := NewParseTree(GrammarSym{})
+	sm.Push(NewSymMatcher([]GrammarSym{p.start, p.eof}, root))
+	for !sm.Empty() {
+		m, _ := sm.Pop()
+		if m.Done() {
+			continue
+		}
+		sym, _ := m.First()
+		if sym.Term() {
+			token, ok := ts.Pop()
+			if !ok {
+				return nil, fmt.Errorf("Unexpected end of token stream: %w", ErrParse)
+			}
+			if sym.Kind() != token.Kind() {
+				return nil, fmt.Errorf("Unexpected token: %s: %w", token.Val(), ErrParse)
+			}
+			m.Match(NewParseTreeLeaf(sym, token))
+			sm.Push(m)
+			continue
+		}
+		next, ok := ts.Peek()
+		if !ok {
+			return nil, fmt.Errorf("Unexpected end of token stream: %w", ErrParse)
+		}
+		prod, ok := p.getProduction(sym.Kind(), next.Kind())
+		if !ok {
+			return nil, fmt.Errorf("Unexpected token: %s: %w", next.Val(), ErrParse)
+		}
+		child := NewParseTree(sym)
+		m.Match(child)
+		sm.Push(m)
+		sm.Push(NewSymMatcher(prod, child))
 	}
-	last, ok := ts.Peek()
-	if !ok {
-		return nil, fmt.Errorf("Unexpected end of token stream: %w", ErrParse)
+	rootChildren := root.Children()
+	if len(rootChildren) != 2 {
+		return nil, fmt.Errorf("Unexpected parse tree shape: %w", ErrParseInternal)
 	}
-	if p.eof.Kind() != last.Kind() {
-		return nil, fmt.Errorf("Unexpected token: %s: %w", last.Val(), ErrParse)
+	lastNode := rootChildren[1]
+	if !lastNode.Term() || lastNode.Sym() != p.eof {
+		return nil, fmt.Errorf("Unexpected parse tree shape: %w", ErrParseInternal)
 	}
-	return root, nil
+	return rootChildren[0], nil
 }
