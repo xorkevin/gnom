@@ -9,24 +9,24 @@ import (
 type (
 	Dfa struct {
 		kind  int
-		nodes map[byte]*Dfa
+		nodes map[rune]*Dfa
 	}
 )
 
 func NewDfa(kind int) *Dfa {
 	return &Dfa{
 		kind:  kind,
-		nodes: map[byte]*Dfa{},
+		nodes: map[rune]*Dfa{},
 	}
 }
 
-func (d *Dfa) AddDfa(s []byte, dfa *Dfa) {
+func (d *Dfa) AddDfa(s []rune, dfa *Dfa) {
 	for _, c := range s {
 		d.nodes[c] = dfa
 	}
 }
 
-func (d *Dfa) AddPath(path []byte, kind int, def int) *Dfa {
+func (d *Dfa) AddPath(path []rune, kind int, def int) *Dfa {
 	if len(path) == 0 {
 		d.kind = kind
 		return d
@@ -39,7 +39,7 @@ func (d *Dfa) AddPath(path []byte, kind int, def int) *Dfa {
 	return d.nodes[c].AddPath(path, kind, def)
 }
 
-func (d *Dfa) Match(c byte) (*Dfa, bool) {
+func (d *Dfa) Match(c rune) (*Dfa, bool) {
 	next, ok := d.nodes[c]
 	if !ok {
 		return nil, false
@@ -102,7 +102,7 @@ func minInt(a, b int) int {
 	return a
 }
 
-func (l *DfaLexer) Next(chars []byte) (*Token, []byte, error) {
+func (l *DfaLexer) Next(chars []rune) (*Token, []rune, error) {
 	s := &strings.Builder{}
 	n := l.dfa
 	for {
@@ -115,16 +115,19 @@ func (l *DfaLexer) Next(chars []byte) (*Token, []byte, error) {
 			break
 		}
 		n = next
-		s.WriteByte(c)
+		s.WriteRune(c)
 		chars = chars[1:]
 	}
 	if n.Kind() == l.def {
-		return nil, nil, fmt.Errorf("Invalid token: %s: %w", s.String(), ErrLex)
+		if s.Len() == 0 && len(chars) == 0 {
+			return &Token{kind: l.eof, val: ""}, chars, nil
+		}
+		return nil, nil, fmt.Errorf("Invalid tokens: %s: %w", s.String()+string(chars[:minInt(8, len(chars))]), ErrLex)
 	}
 	return &Token{kind: n.Kind(), val: s.String()}, chars, nil
 }
 
-func (l *DfaLexer) Tokenize(chars []byte) ([]Token, error) {
+func (l *DfaLexer) Tokenize(chars []rune) ([]Token, error) {
 	tokens := []Token{}
 	for {
 		t, next, err := l.Next(chars)
@@ -136,9 +139,6 @@ func (l *DfaLexer) Tokenize(chars []byte) ([]Token, error) {
 		}
 		chars = next
 		if t.Kind() == l.eof {
-			if len(chars) > 0 {
-				return nil, fmt.Errorf("Invalid token: %s: %w", chars[:minInt(len(chars), 8)], ErrLex)
-			}
 			return tokens, nil
 		}
 	}

@@ -55,16 +55,16 @@ func TestDfaLexer_Tokenize(t *testing.T) {
 		tokenValTypeInt
 	)
 
-	dfa := NewDfa(tokenEOF)
+	dfa := NewDfa(tokenDefault)
 	wspace := NewDfa(tokenWSpace)
-	dfa.AddDfa([]byte(" "), wspace)
-	wspace.AddDfa([]byte(" "), wspace)
+	dfa.AddDfa([]rune(" "), wspace)
+	wspace.AddDfa([]rune(" "), wspace)
 	num := NewDfa(tokenNum)
-	dfa.AddDfa([]byte("0123456789"), num)
-	num.AddDfa([]byte("0123456789"), num)
-	dfa.AddPath([]byte("+"), tokenAdd, tokenDefault)
-	dfa.AddPath([]byte("*"), tokenAdd, tokenDefault)
-	dfa.AddPath([]byte("int"), tokenValTypeInt, tokenDefault)
+	dfa.AddDfa([]rune("0123456789"), num)
+	num.AddDfa([]rune("0123456789"), num)
+	dfa.AddPath([]rune("+"), tokenAdd, tokenDefault)
+	dfa.AddPath([]rune("*"), tokenAdd, tokenDefault)
+	dfa.AddPath([]rune("int"), tokenValTypeInt, tokenDefault)
 
 	for _, c := range []struct {
 		chars  string
@@ -93,7 +93,7 @@ func TestDfaLexer_Tokenize(t *testing.T) {
 		lexer := NewDfaLexer(dfa, tokenDefault, tokenEOF, map[int]struct{}{
 			tokenWSpace: {},
 		})
-		tokens, err := lexer.Tokenize([]byte(c.chars))
+		tokens, err := lexer.Tokenize([]rune(c.chars))
 		if c.err != nil {
 			assert.Errorf(err, "Should fail to tokenize: %s", c.chars)
 			assert.Truef(errors.Is(err, c.err), "Should fail to tokenize: %s", c.chars)
