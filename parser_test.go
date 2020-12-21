@@ -485,6 +485,156 @@ func TestLL1Parser_Parse(t *testing.T) {
 		tree, err := parser.Parse(tokens)
 		if c.err != nil {
 			assert.Errorf(err, "Should fail to parse %s", c.text)
+			assert.Truef(errors.Is(err, c.err), "Should fail to parse %s", c.text)
+			continue
+		}
+		assert.NoErrorf(err, "Failed to parse %s: %v", c.text, err)
+		v, err := evalTree(tree)
+		assert.NoErrorf(err, "Failed to eval %s: %v", c.text, err)
+		assert.Equal(c.exp, v)
+	}
+}
+
+func TestPEGParser_Parse(t *testing.T) {
+	assert := assert.New(t)
+
+	g := NewGrammarSymGenerator()
+
+	def := g.Term()
+	eof := g.Term()
+	wspace := g.Term()
+	S := g.NonTerm()
+
+	T := g.NonTerm()
+	SP := g.NonTerm()
+	TP := g.NonTerm()
+	F := g.NonTerm()
+	num := g.Term()
+	plus := g.Term()
+	star := g.Term()
+	lparen := g.Term()
+	rparen := g.Term()
+
+	dfa := NewDfa(def.Kind())
+	wspaceNode := NewDfa(wspace.Kind())
+	dfa.AddDfa([]rune(" "), wspaceNode)
+	wspaceNode.AddDfa([]rune(" "), wspaceNode)
+	numNode := NewDfa(num.Kind())
+	dfa.AddDfa([]rune("0123456789"), numNode)
+	numNode.AddDfa([]rune("0123456789"), numNode)
+	dfa.AddPath([]rune("+"), plus.Kind(), def.Kind())
+	dfa.AddPath([]rune("*"), star.Kind(), def.Kind())
+	dfa.AddPath([]rune("("), lparen.Kind(), def.Kind())
+	dfa.AddPath([]rune(")"), rparen.Kind(), def.Kind())
+	lexer := NewDfaLexer(dfa, def.Kind(), eof.Kind(), map[int]struct{}{
+		wspace.Kind(): {},
+	})
+
+	parser := NewPEGParser([]GrammarRule{
+		NewGrammarRule(S, T, SP),
+		NewGrammarRule(SP, plus, T, SP),
+		NewGrammarRule(SP),
+		NewGrammarRule(T, F, TP),
+		NewGrammarRule(TP, star, F, TP),
+		NewGrammarRule(TP),
+		NewGrammarRule(F, num),
+		NewGrammarRule(F, lparen, S, rparen),
+	}, S, eof)
+
+	var evalTree func(node *ParseTree) (int, error)
+	evalTree = func(node *ParseTree) (int, error) {
+		if node.Term() {
+			if node.Kind() == num.Kind() {
+				v, err := strconv.Atoi(node.Val())
+				if err != nil {
+					return 0, err
+				}
+				return v, nil
+			}
+			return 0, fmt.Errorf("Cannot eval")
+		}
+		children := node.Children()
+		switch node.Kind() {
+		case S.Kind():
+			v1, err := evalTree(children[0])
+			if err != nil {
+				return 0, err
+			}
+			v2, err := evalTree(children[1])
+			if err != nil {
+				return 0, err
+			}
+			return v1 + v2, nil
+		case SP.Kind():
+			if len(children) == 0 {
+				return 0, nil
+			}
+			v1, err := evalTree(children[1])
+			if err != nil {
+				return 0, err
+			}
+			v2, err := evalTree(children[2])
+			if err != nil {
+				return 0, err
+			}
+			return v1 + v2, nil
+		case T.Kind():
+			v1, err := evalTree(children[0])
+			if err != nil {
+				return 0, err
+			}
+			v2, err := evalTree(children[1])
+			if err != nil {
+				return 0, err
+			}
+			return v1 * v2, nil
+		case TP.Kind():
+			if len(children) == 0 {
+				return 1, nil
+			}
+			v1, err := evalTree(children[1])
+			if err != nil {
+				return 0, err
+			}
+			v2, err := evalTree(children[2])
+			if err != nil {
+				return 0, err
+			}
+			return v1 * v2, nil
+		case F.Kind():
+			if len(children) == 1 {
+				return evalTree(children[0])
+			}
+			return evalTree(children[1])
+		default:
+			return 0, fmt.Errorf("Cannot eval")
+		}
+	}
+
+	for _, c := range []struct {
+		text string
+		err  error
+		exp  int
+	}{
+		{
+			text: "1 + 2 + 3",
+			exp:  6,
+		},
+		{
+			text: "3 * 2 + 3",
+			exp:  9,
+		},
+		{
+			text: "3 * (2 + 3)",
+			exp:  15,
+		},
+	} {
+		tokens, err := lexer.Tokenize([]rune(c.text))
+		assert.NoErrorf(err, "Failed to tokenize %s: %v", c.text, err)
+		tree, err := parser.Parse(tokens)
+		if c.err != nil {
+			assert.Errorf(err, "Should fail to parse %s", c.text)
+			assert.Truef(errors.Is(err, c.err), "Should fail to parse %s", c.text)
 			continue
 		}
 		assert.NoErrorf(err, "Failed to parse %s: %v", c.text, err)
