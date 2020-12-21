@@ -48,7 +48,7 @@ func TestToken(t *testing.T) {
 			val:  "",
 		},
 	} {
-		token := NewToken(c.kind, c.val)
+		token := newToken(c.kind, c.val)
 		assert.Equalf(c.kind, token.Kind(), "Invalid kind: %d %s", c.kind, c.val)
 		assert.Equalf(c.val, token.Val(), "Invalid val: %d %s", c.kind, c.val)
 	}
@@ -86,11 +86,11 @@ func TestDfaLexer_Tokenize(t *testing.T) {
 		{
 			chars: "    314 +  1   int",
 			tokens: []Token{
-				NewToken(tokenNum, "314"),
-				NewToken(tokenAdd, "+"),
-				NewToken(tokenNum, "1"),
-				NewToken(tokenValTypeInt, "int"),
-				NewToken(tokenEOF, ""),
+				newToken(tokenNum, "314"),
+				newToken(tokenAdd, "+"),
+				newToken(tokenNum, "1"),
+				newToken(tokenValTypeInt, "int"),
+				newToken(tokenEOF, ""),
 			},
 		},
 		{

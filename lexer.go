@@ -58,7 +58,7 @@ type (
 	}
 )
 
-func NewToken(kind int, val string) Token {
+func newToken(kind int, val string) Token {
 	return Token{
 		kind: kind,
 		val:  val,

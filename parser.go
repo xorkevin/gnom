@@ -264,24 +264,24 @@ func calcLL1ParseTable(rules []GrammarRule, nonTerminals *changeIntSet, nullable
 }
 
 type (
-	TokenStack struct {
+	tokenStack struct {
 		tokens []Token
 		buf    []Token
 	}
 )
 
-func NewTokenStack(tokens []Token) *TokenStack {
-	return &TokenStack{
+func newTokenStack(tokens []Token) *tokenStack {
+	return &tokenStack{
 		tokens: tokens,
 		buf:    []Token{},
 	}
 }
 
-func (s *TokenStack) Empty() bool {
+func (s *tokenStack) Empty() bool {
 	return len(s.tokens) == 0 && len(s.buf) == 0
 }
 
-func (s *TokenStack) Pop() (Token, bool) {
+func (s *tokenStack) Pop() (Token, bool) {
 	if len(s.buf) == 0 {
 		if len(s.tokens) == 0 {
 			return Token{}, false
@@ -295,7 +295,7 @@ func (s *TokenStack) Pop() (Token, bool) {
 	return k, true
 }
 
-func (s *TokenStack) Peek() (Token, bool) {
+func (s *tokenStack) Peek() (Token, bool) {
 	if len(s.buf) == 0 {
 		if len(s.tokens) == 0 {
 			return Token{}, false
@@ -305,7 +305,7 @@ func (s *TokenStack) Peek() (Token, bool) {
 	return s.buf[len(s.buf)-1], true
 }
 
-func (s *TokenStack) Push(t Token) {
+func (s *tokenStack) Push(t Token) {
 	s.buf = append(s.buf, t)
 }
 
@@ -317,26 +317,18 @@ type (
 	}
 )
 
-func NewParseTree(sym GrammarSym) *ParseTree {
+func newParseTree(sym GrammarSym) *ParseTree {
 	return &ParseTree{
 		sym:      sym,
 		children: []*ParseTree{},
 	}
 }
 
-func NewParseTreeLeaf(sym GrammarSym, token Token) *ParseTree {
+func newParseTreeLeaf(sym GrammarSym, token Token) *ParseTree {
 	return &ParseTree{
 		sym:      sym,
 		token:    token,
 		children: []*ParseTree{},
-	}
-}
-
-func (t *ParseTree) ShallowClone() *ParseTree {
-	return &ParseTree{
-		sym:      t.sym,
-		token:    t.token,
-		children: t.children,
 	}
 }
 
@@ -364,72 +356,76 @@ func (t *ParseTree) Children() []*ParseTree {
 	return t.children
 }
 
-func (t *ParseTree) AddChild(child *ParseTree) {
+func (t *ParseTree) addChild(child *ParseTree) {
 	t.children = append(t.children, child)
 }
 
+func (t *ParseTree) popChild() {
+	t.children = t.children[:len(t.children)-1]
+}
+
 type (
-	LL1SymMatcher struct {
+	ll1SymMatcher struct {
 		syms []GrammarSym
 		node *ParseTree
 	}
 )
 
-func NewSymMatcher(syms []GrammarSym, node *ParseTree) *LL1SymMatcher {
-	return &LL1SymMatcher{
+func newLL1SymMatcher(syms []GrammarSym, node *ParseTree) *ll1SymMatcher {
+	return &ll1SymMatcher{
 		syms: syms,
 		node: node,
 	}
 }
 
-func (m *LL1SymMatcher) Done() bool {
+func (m *ll1SymMatcher) Done() bool {
 	return len(m.syms) == 0
 }
 
-func (m *LL1SymMatcher) First() (GrammarSym, bool) {
+func (m *ll1SymMatcher) First() (GrammarSym, bool) {
 	if len(m.syms) == 0 {
 		return GrammarSym{}, false
 	}
 	return m.syms[0], true
 }
 
-func (m *LL1SymMatcher) Match(node *ParseTree) bool {
+func (m *ll1SymMatcher) Match(node *ParseTree) bool {
 	if len(m.syms) == 0 {
 		return false
 	}
 	m.syms = m.syms[1:]
-	m.node.AddChild(node)
+	m.node.addChild(node)
 	return true
 }
 
 type (
-	LL1SymMatcherStack struct {
-		stack []*LL1SymMatcher
+	ll1SymMatcherStack struct {
+		stack []*ll1SymMatcher
 	}
 )
 
-func NewLL1SymMatcherStack() *LL1SymMatcherStack {
-	return &LL1SymMatcherStack{
-		stack: []*LL1SymMatcher{},
+func newLL1SymMatcherStack() *ll1SymMatcherStack {
+	return &ll1SymMatcherStack{
+		stack: []*ll1SymMatcher{},
 	}
 }
 
-func (s *LL1SymMatcherStack) Empty() bool {
+func (s *ll1SymMatcherStack) Empty() bool {
 	return len(s.stack) == 0
 }
 
-func (s *LL1SymMatcherStack) Push(m *LL1SymMatcher) {
+func (s *ll1SymMatcherStack) Push(m *ll1SymMatcher) {
 	s.stack = append(s.stack, m)
 }
 
-func (s *LL1SymMatcherStack) Peek() (*LL1SymMatcher, bool) {
+func (s *ll1SymMatcherStack) Peek() (*ll1SymMatcher, bool) {
 	if s.Empty() {
 		return nil, false
 	}
 	return s.stack[len(s.stack)-1], true
 }
 
-func (s *LL1SymMatcherStack) Pop() (*LL1SymMatcher, bool) {
+func (s *ll1SymMatcherStack) Pop() (*ll1SymMatcher, bool) {
 	if s.Empty() {
 		return nil, false
 	}
@@ -492,10 +488,10 @@ var (
 )
 
 func (p *LL1Parser) Parse(tokens []Token) (*ParseTree, error) {
-	ts := NewTokenStack(tokens)
-	sm := NewLL1SymMatcherStack()
-	root := NewParseTree(GrammarSym{})
-	sm.Push(NewSymMatcher([]GrammarSym{p.start, p.eof}, root))
+	ts := newTokenStack(tokens)
+	sm := newLL1SymMatcherStack()
+	root := newParseTree(GrammarSym{})
+	sm.Push(newLL1SymMatcher([]GrammarSym{p.start, p.eof}, root))
 	for !sm.Empty() {
 		m, _ := sm.Peek()
 		if m.Done() {
@@ -511,7 +507,7 @@ func (p *LL1Parser) Parse(tokens []Token) (*ParseTree, error) {
 			if sym.Kind() != token.Kind() {
 				return nil, fmt.Errorf("Unexpected token: %s: %w", token.Val(), ErrParse)
 			}
-			m.Match(NewParseTreeLeaf(sym, token))
+			m.Match(newParseTreeLeaf(sym, token))
 			continue
 		}
 		next, ok := ts.Peek()
@@ -522,9 +518,9 @@ func (p *LL1Parser) Parse(tokens []Token) (*ParseTree, error) {
 		if !ok {
 			return nil, fmt.Errorf("Unexpected token: %s: %w", next.Val(), ErrParse)
 		}
-		child := NewParseTree(sym)
+		child := newParseTree(sym)
 		m.Match(child)
-		sm.Push(NewSymMatcher(prod, child))
+		sm.Push(newLL1SymMatcher(prod, child))
 	}
 	rootChildren := root.Children()
 	if len(rootChildren) != 2 {
@@ -544,58 +540,60 @@ type (
 		eof   GrammarSym
 	}
 
-	PEGMatcher interface {
-		Match(tokens []Token) (*ParseTree, []Token, error)
-	}
-
-	PEGSymMatcher struct {
+	pegSymMatcher struct {
 		node   *ParseTree
 		syms   []GrammarSym
-		parent PEGMatcher
+		parent *pegSymMatcher
 		rules  map[int][][]GrammarSym
 	}
 )
 
-func NewPEGSymMatcher(node *ParseTree, syms []GrammarSym, parent PEGMatcher, rules map[int][][]GrammarSym) *PEGSymMatcher {
-	return &PEGSymMatcher{
+func newPEGSymMatcher(node *ParseTree, syms []GrammarSym, parent *pegSymMatcher, rules map[int][][]GrammarSym) *pegSymMatcher {
+	return &pegSymMatcher{
 		node:   node,
 		syms:   syms,
 		parent: parent,
+		rules:  rules,
 	}
 }
 
-func (m *PEGSymMatcher) Match(tokens []Token) (*ParseTree, []Token, error) {
+func (m *pegSymMatcher) Match(tokens []Token) ([]Token, error) {
 	if len(m.syms) == 0 {
 		if m.parent != nil {
 			return m.parent.Match(tokens)
 		}
-		return m.node, tokens, nil
+		return tokens, nil
 	}
 	sym := m.syms[0]
 	if sym.Term() {
 		if len(tokens) == 0 {
-			return nil, nil, fmt.Errorf("Unexpected end of token stream: %w", ErrParse)
+			return nil, fmt.Errorf("Unexpected end of token stream: %w", ErrParse)
 		}
 		token := tokens[0]
 		if sym.Kind() != token.Kind() {
-			return nil, nil, fmt.Errorf("Unexpected token: %s: %w", token.Val(), ErrParse)
+			return nil, fmt.Errorf("Unexpected token: %s: %w", token.Val(), ErrParse)
 		}
-		m.node.AddChild(NewParseTreeLeaf(sym, token))
-		return NewPEGSymMatcher(m.node, m.syms[1:], m.parent, m.rules).Match(tokens[1:])
+		m.node.addChild(newParseTreeLeaf(sym, token))
+		t, err := newPEGSymMatcher(m.node, m.syms[1:], m.parent, m.rules).Match(tokens[1:])
+		if err != nil {
+			m.node.popChild()
+			return nil, err
+		}
+		return t, nil
 	}
 	prod, ok := m.rules[sym.Kind()]
 	if !ok {
-		return nil, nil, fmt.Errorf("Nonterminal lacks production rule: %d: %w", sym.Kind(), ErrParse)
+		return nil, fmt.Errorf("Nonterminal lacks production rule: %d: %w", sym.Kind(), ErrParse)
 	}
 	for _, i := range prod {
-		next := m.node.ShallowClone()
-		child := NewParseTree(sym)
-		next.AddChild(child)
-		if n, t, err := NewPEGSymMatcher(child, i, NewPEGSymMatcher(next, m.syms[1:], m.parent, m.rules), m.rules).Match(tokens); err == nil {
-			return n, t, nil
+		child := newParseTree(sym)
+		m.node.addChild(child)
+		if t, err := newPEGSymMatcher(child, i, newPEGSymMatcher(m.node, m.syms[1:], m.parent, m.rules), m.rules).Match(tokens); err == nil {
+			return t, nil
 		}
+		m.node.popChild()
 	}
-	return nil, nil, fmt.Errorf("Exhausted all production rules: %w", ErrParse)
+	return nil, fmt.Errorf("Exhausted all production rules: %w", ErrParse)
 }
 
 func NewPEGParser(rules []GrammarRule, start, eof GrammarSym) *PEGParser {
@@ -615,11 +613,11 @@ func NewPEGParser(rules []GrammarRule, start, eof GrammarSym) *PEGParser {
 }
 
 func (p *PEGParser) Parse(tokens []Token) (*ParseTree, error) {
-	root, _, err := NewPEGSymMatcher(NewParseTree(GrammarSym{}), []GrammarSym{p.start, p.eof}, nil, p.rules).Match(tokens)
-	if err != nil {
+	root := newPEGSymMatcher(newParseTree(GrammarSym{}), []GrammarSym{p.start, p.eof}, nil, p.rules)
+	if _, err := root.Match(tokens); err != nil {
 		return nil, err
 	}
-	rootChildren := root.Children()
+	rootChildren := root.node.Children()
 	if len(rootChildren) != 2 {
 		return nil, fmt.Errorf("Unexpected parse tree shape: %w", ErrParseInternal)
 	}
